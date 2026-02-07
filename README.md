@@ -65,6 +65,21 @@ make dashboard
 # Acessar em: http://localhost:8585
 ```
 
+### 4. Configuração
+
+Para alterar as credenciais do banco ou porta do dashboard, edite o arquivo `flow.config.yaml` na raiz do projeto:
+
+```yaml
+db:
+  host: 127.0.0.1
+  port: 5432
+  user: user
+  password: password
+  name: flow_db
+server:
+  port: 8585
+```
+
 ### 3. Executar Exemplo (Simulação)
 
 **Passo 1: Iniciar um Pedido (Service A)**

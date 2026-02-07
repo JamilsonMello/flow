@@ -11,6 +11,9 @@ import (
 	"strings"
 	"time"
 
+	"flow-tool/pkg/config"
+	// "flow-tool/pkg/flow"
+
 	_ "github.com/lib/pq"
 )
 
@@ -45,8 +48,17 @@ type TimelineEvent struct {
 }
 
 func main() {
-	connStr := "user=user password=password dbname=flow_db sslmode=disable host=127.0.0.1 port=5432"
-	db, err := sql.Open("postgres", connStr)
+	// Load Configuration
+	cfg, err := config.LoadConfig("flow.config.yaml")
+	if err != nil {
+		// Fallback for development if running from cmd/dashboard
+		cfg, err = config.LoadConfig("../../flow.config.yaml")
+		if err != nil {
+			log.Fatalf("Failed to load configuration: %v", err)
+		}
+	}
+
+	db, err := sql.Open("postgres", cfg.GetConnString())
 	if err != nil {
 		log.Fatalf("Failed to connect to DB: %v", err)
 	}
@@ -178,8 +190,8 @@ func main() {
 		json.NewEncoder(w).Encode(response)
 	})
 
-	fmt.Println("Dashboard running at http://localhost:8585")
-	log.Fatal(http.ListenAndServe(":8585", nil))
+	fmt.Printf("Dashboard running at http://localhost:%d\n", cfg.Server.Port)
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", cfg.Server.Port), nil))
 }
 
 func enableCors(w http.ResponseWriter) {
