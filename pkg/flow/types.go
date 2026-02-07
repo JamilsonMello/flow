@@ -31,8 +31,9 @@ type Assertion struct {
 }
 
 type FlowClient struct {
-	DB          *sql.DB
-	ServiceName string
+	DB           *sql.DB
+	ServiceName  string
+	IsProduction bool
 }
 
 type FlowInstance struct {

@@ -46,8 +46,8 @@ func main() {
 	// Setup DB
 	db, _ := sql.Open("postgres", "user=user password=password dbname=flow_db sslmode=disable host=127.0.0.1 port=5432")
 
-	// Initialize Flow Client
-	flowClient, _ := flow.NewClient(db, "OrderService")
+	// Initialize Flow Client (isProduction = false)
+	flowClient, _ := flow.NewClient(db, "OrderService", false)
 
 	// Inject into Service
 	svc := &OrderService{flowClient: flowClient}

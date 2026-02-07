@@ -25,7 +25,8 @@ func main() {
 	// Wait for DB to be ready given docker-compose startup
 	time.Sleep(2 * time.Second)
 
-	client, err := flow.NewClient(db, "Service A (Order System)")
+	// IsProduction = false for demo
+	client, err := flow.NewClient(db, "Service A (Order System)", false)
 	if err != nil {
 		log.Fatalf("Failed to create client: %v", err)
 	}

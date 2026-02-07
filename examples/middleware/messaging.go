@@ -48,7 +48,7 @@ func FlowMiddleware(flowClient *flow.FlowClient, next Handler) Handler {
 func main() {
 	// --- Infrastructure Setup ---
 	// db, _ := sql.Open(...)
-	// flowClient, _ := flow.NewClient(db, "ConsumerService")
+	// flowClient, _ := flow.NewClient(db, "ConsumerService", false)
 
 	// Mocking for example
 	// flowClient := &flow.Client{}

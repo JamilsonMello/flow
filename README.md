@@ -102,6 +102,20 @@ make run-a-conflict
 # Gera um fluxo com ID fixo para testes de colisão ou interrupção.
 ```
 
+
+---
+
+## ⚡ Modo de Produção (Zero Overhead)
+
+A biblioteca possui uma feature flag interna para desativar **completamente** o processamento em produção, evitando custos ou latência.
+
+```go
+// Se o 3º argumento for 'true', todas as chamadas subsequentes (Start, CreatePoint, Assert)
+// retornarão imediatamente sem conectar no banco ou alocar memória excessiva.
+isProd := os.Getenv("GO_ENV") == "production"
+client, _ := flow.NewClient(db, "MyService", isProd)
+```
+
 ---
 
 ## 💻 Como Usar a Lib (`pkg/flow`)
@@ -116,10 +130,12 @@ import "github.com/seu-repo/flow/pkg/flow"
 ```go
 // 1. Iniciar o contexto do Flow
 ctx := context.Background()
-client := flow.NewClient(db)
+// isProduction=true desativa o Flow completamente (Zero Overhead)
+client, _ := flow.NewClient(db, "Service A", os.Getenv("ENV") == "production")
 
 // 2. Criar um novo rastreamento
 f, _ := client.Start("ORDER-123")
+// Se isProduction=true, 'f' será um objeto dummy que não faz nada.
 
 // 3. Definir o que esperamos que aconteça (Point)
 payload := map[string]interface{}{"amount": 100, "status": "pending"}

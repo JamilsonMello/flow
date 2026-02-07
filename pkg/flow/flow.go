@@ -39,17 +39,24 @@ CREATE INDEX IF NOT EXISTS idx_assertions_flow_id ON assertions(flow_id);
 CREATE INDEX IF NOT EXISTS idx_flows_name_status ON flows(name, status);
 `
 
-func NewClient(db *sql.DB, serviceName string) (*FlowClient, error) {
-	if _, err := db.Exec(schema); err != nil {
-		return nil, fmt.Errorf("failed to apply schema: %v", err)
+func NewClient(db *sql.DB, serviceName string, isProduction bool) (*FlowClient, error) {
+	if !isProduction {
+		if _, err := db.Exec(schema); err != nil {
+			return nil, fmt.Errorf("failed to apply schema: %v", err)
+		}
 	}
 	return &FlowClient{
-		DB:          db,
-		ServiceName: serviceName,
+		DB:           db,
+		ServiceName:  serviceName,
+		IsProduction: isProduction,
 	}, nil
 }
 
 func (c *FlowClient) Start(flowName string) (*FlowInstance, error) {
+	if c.IsProduction {
+		return &FlowInstance{client: c, Flow: &Flow{Name: flowName, Status: "SKIPPED"}}, nil
+	}
+
 	_, err := c.DB.Exec("UPDATE flows SET status = 'INTERRUPTED' WHERE name = $1 AND status = 'ACTIVE'", flowName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to interrupt existing flow: %v", err)
@@ -68,6 +75,10 @@ func (c *FlowClient) Start(flowName string) (*FlowInstance, error) {
 }
 
 func (c *FlowClient) GetFlow(flowName string) (*FlowInstance, error) {
+	if c.IsProduction {
+		return &FlowInstance{client: c, Flow: &Flow{Name: flowName, Status: "SKIPPED"}}, nil
+	}
+
 	var f Flow
 	err := c.DB.QueryRow("SELECT id, name, status, created_at FROM flows WHERE name = $1 AND status = 'ACTIVE' ORDER BY id DESC LIMIT 1", flowName).Scan(
 		&f.ID, &f.Name, &f.Status, &f.CreatedAt,
@@ -82,6 +93,10 @@ func (c *FlowClient) GetFlow(flowName string) (*FlowInstance, error) {
 }
 
 func (f *FlowInstance) CreatePoint(description string, expected interface{}) error {
+	if f.client.IsProduction {
+		return nil
+	}
+
 	expectedJSON, err := json.Marshal(expected)
 	if err != nil {
 		return fmt.Errorf("failed to marshal expected value: %v", err)
@@ -97,6 +112,10 @@ func (f *FlowInstance) CreatePoint(description string, expected interface{}) err
 }
 
 func (f *FlowInstance) AddAssertion(actual interface{}) error {
+	if f.client.IsProduction {
+		return nil
+	}
+
 	actualJSON, err := json.Marshal(actual)
 	if err != nil {
 		return fmt.Errorf("failed to marshal actual value: %v", err)
@@ -112,6 +131,10 @@ func (f *FlowInstance) AddAssertion(actual interface{}) error {
 }
 
 func (f *FlowInstance) Finish() (*FinishResult, error) {
+	if f.client.IsProduction {
+		return &FinishResult{Success: true}, nil
+	}
+
 	_, err := f.client.DB.Exec("UPDATE flows SET status = 'FINISHED' WHERE id = $1", f.Flow.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to close flow: %v", err)

@@ -14,7 +14,8 @@ type FlowOrderObserver struct {
 }
 
 func NewFlowOrderObserver(db *sql.DB, serviceName string) (*FlowOrderObserver, error) {
-	client, err := flow.NewClient(db, serviceName)
+	// isProduction = false for example
+	client, err := flow.NewClient(db, serviceName, false)
 	if err != nil {
 		return nil, err
 	}
