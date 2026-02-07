@@ -39,22 +39,32 @@ CREATE INDEX IF NOT EXISTS idx_assertions_flow_id ON assertions(flow_id);
 CREATE INDEX IF NOT EXISTS idx_flows_name_status ON flows(name, status);
 `
 
-func NewClient(db *sql.DB, serviceName string, isProduction bool) (*FlowClient, error) {
-	if !isProduction {
+func NewClient(db *sql.DB, config FlowConfig) (*FlowClient, error) {
+	if !config.IsProduction {
 		if _, err := db.Exec(schema); err != nil {
 			return nil, fmt.Errorf("failed to apply schema: %v", err)
 		}
 	}
 	return &FlowClient{
-		DB:           db,
-		ServiceName:  serviceName,
-		IsProduction: isProduction,
+		DB:     db,
+		Config: config,
 	}, nil
 }
 
 func (c *FlowClient) Start(flowName string) (*FlowInstance, error) {
-	if c.IsProduction {
+	if c.Config.IsProduction {
 		return &FlowInstance{client: c, Flow: &Flow{Name: flowName, Status: "SKIPPED"}}, nil
+	}
+
+	if c.Config.MaxExecutions > 0 {
+		var count int
+		err := c.DB.QueryRow("SELECT COUNT(*) FROM flows WHERE name = $1", flowName).Scan(&count)
+		if err != nil {
+			return nil, fmt.Errorf("failed to count flows: %v", err)
+		}
+		if count >= c.Config.MaxExecutions {
+			return &FlowInstance{client: c, Flow: &Flow{Name: flowName, Status: "SKIPPED_LIMIT"}}, nil
+		}
 	}
 
 	_, err := c.DB.Exec("UPDATE flows SET status = 'INTERRUPTED' WHERE name = $1 AND status = 'ACTIVE'", flowName)
@@ -75,7 +85,7 @@ func (c *FlowClient) Start(flowName string) (*FlowInstance, error) {
 }
 
 func (c *FlowClient) GetFlow(flowName string) (*FlowInstance, error) {
-	if c.IsProduction {
+	if c.Config.IsProduction {
 		return &FlowInstance{client: c, Flow: &Flow{Name: flowName, Status: "SKIPPED"}}, nil
 	}
 
@@ -93,7 +103,7 @@ func (c *FlowClient) GetFlow(flowName string) (*FlowInstance, error) {
 }
 
 func (f *FlowInstance) CreatePoint(description string, expected interface{}) error {
-	if f.client.IsProduction {
+	if f.client.Config.IsProduction || (len(f.Flow.Status) >= 7 && f.Flow.Status[:7] == "SKIPPED") {
 		return nil
 	}
 
@@ -103,7 +113,7 @@ func (f *FlowInstance) CreatePoint(description string, expected interface{}) err
 	}
 
 	_, err = f.client.DB.Exec("INSERT INTO points (flow_id, description, expected, service_name) VALUES ($1, $2, $3, $4)",
-		f.Flow.ID, description, expectedJSON, f.client.ServiceName)
+		f.Flow.ID, description, expectedJSON, f.client.Config.ServiceName)
 
 	if err != nil {
 		return fmt.Errorf("failed to create point: %v", err)
@@ -112,7 +122,7 @@ func (f *FlowInstance) CreatePoint(description string, expected interface{}) err
 }
 
 func (f *FlowInstance) AddAssertion(actual interface{}) error {
-	if f.client.IsProduction {
+	if f.client.Config.IsProduction || (len(f.Flow.Status) >= 7 && f.Flow.Status[:7] == "SKIPPED") {
 		return nil
 	}
 
@@ -122,7 +132,7 @@ func (f *FlowInstance) AddAssertion(actual interface{}) error {
 	}
 
 	_, err = f.client.DB.Exec("INSERT INTO assertions (flow_id, actual, service_name) VALUES ($1, $2, $3)",
-		f.Flow.ID, actualJSON, f.client.ServiceName)
+		f.Flow.ID, actualJSON, f.client.Config.ServiceName)
 
 	if err != nil {
 		return fmt.Errorf("failed to add assertion: %v", err)
@@ -131,7 +141,7 @@ func (f *FlowInstance) AddAssertion(actual interface{}) error {
 }
 
 func (f *FlowInstance) Finish() (*FinishResult, error) {
-	if f.client.IsProduction {
+	if f.client.Config.IsProduction {
 		return &FinishResult{Success: true}, nil
 	}
 

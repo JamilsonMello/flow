@@ -33,7 +33,7 @@ func FlowMiddleware(flowClient *flow.FlowClient, next Handler) Handler {
 
 func main() {
 	// db, _ := sql.Open(...)
-	// flowClient, _ := flow.NewClient(db, "ConsumerService", false)
+	// flowClient, _ := flow.NewClient(db, flow.FlowConfig{ServiceName: "ConsumerService"})
 
 	var flowClient *flow.FlowClient = nil
 

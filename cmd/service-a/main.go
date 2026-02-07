@@ -26,7 +26,11 @@ func main() {
 	time.Sleep(2 * time.Second)
 
 	// IsProduction = false for demo
-	client, err := flow.NewClient(db, "Service A (Order System)", false)
+	client, err := flow.NewClient(db, flow.FlowConfig{
+		ServiceName:   "Service A (Order System)",
+		IsProduction:  false,
+		MaxExecutions: 2,
+	})
 	if err != nil {
 		log.Fatalf("Failed to create client: %v", err)
 	}

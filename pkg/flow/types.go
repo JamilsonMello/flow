@@ -30,10 +30,15 @@ type Assertion struct {
 	CreatedAt   time.Time       `json:"created_at"`
 }
 
+type FlowConfig struct {
+	ServiceName   string
+	IsProduction  bool
+	MaxExecutions int
+}
+
 type FlowClient struct {
-	DB           *sql.DB
-	ServiceName  string
-	IsProduction bool
+	DB     *sql.DB
+	Config FlowConfig
 }
 
 type FlowInstance struct {

@@ -32,7 +32,11 @@ func (s *OrderService) CreateOrder(orderID string, amount float64) error {
 func main() {
 	db, _ := sql.Open("postgres", "user=user password=password dbname=flow_db sslmode=disable host=127.0.0.1 port=5432")
 
-	flowClient, _ := flow.NewClient(db, "OrderService", false)
+	flowClient, _ := flow.NewClient(db, flow.FlowConfig{
+		ServiceName:   "OrderService",
+		IsProduction:  false,
+		MaxExecutions: 1,
+	})
 
 	svc := &OrderService{flowClient: flowClient}
 

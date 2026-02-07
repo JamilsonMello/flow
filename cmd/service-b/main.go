@@ -19,7 +19,11 @@ func main() {
 	}
 	defer db.Close()
 
-	client, err := flow.NewClient(db, "Service B (Logistics & Finance)", false)
+	client, err := flow.NewClient(db, flow.FlowConfig{
+		ServiceName:   "Service B (Logistics & Finance)",
+		IsProduction:  false,
+		MaxExecutions: 1,
+	})
 	if err != nil {
 		log.Fatalf("Failed to create client: %v", err)
 	}

@@ -113,7 +113,20 @@ A biblioteca possui uma feature flag interna para desativar **completamente** o 
 // Se o 3º argumento for 'true', todas as chamadas subsequentes (Start, CreatePoint, Assert)
 // retornarão imediatamente sem conectar no banco ou alocar memória excessiva.
 isProd := os.Getenv("GO_ENV") == "production"
-client, _ := flow.NewClient(db, "MyService", isProd)
+client, _ := flow.NewClient(db, "MyService", isProd, 0)
+```
+
+## 🛑 Controle de Volume (Sampling/Limiting)
+
+Você pode limitar a quantidade de vezes que um fluxo é registrado para economizar armazenamento.
+Exemplo: Registrar apenas os primeiros 1000 "Pedidos" para validação, e ignorar o restante.
+
+```go
+// O 4º argumento define o limite. 0 = Sem limite.
+client, _ := flow.NewClient(db, flow.FlowConfig{
+    ServiceName:   "MyService",
+    MaxExecutions: 1000,
+})
 ```
 
 ---
@@ -130,8 +143,13 @@ import "github.com/seu-repo/flow/pkg/flow"
 ```go
 // 1. Iniciar o contexto do Flow
 ctx := context.Background()
-// isProduction=true desativa o Flow completamente (Zero Overhead)
-client, _ := flow.NewClient(db, "Service A", os.Getenv("ENV") == "production")
+// Configuração via Struct
+client, _ := flow.NewClient(db, flow.FlowConfig{
+    ServiceName:   "Service A",
+    IsProduction:  os.Getenv("ENV") == "production",
+    MaxExecutions: 100, // 0 = infinito
+})
+// Se já executou 100 vezes o mesmo nome de fluxo, ele pula automaticamente.
 
 // 2. Criar um novo rastreamento
 f, _ := client.Start("ORDER-123")
