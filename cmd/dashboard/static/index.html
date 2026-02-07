@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flow | Distributed Tracing</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="brand">
+                    <div class="logo-icon">F</div>
+                    <span>Flow</span>
+                </div>
+                <div class="controls">
+                    <button id="refreshBtn" class="icon-btn" title="Refresh" onclick="refreshFlows()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M23 4v6h-6"></path>
+                            <path d="M1 20v-6h6"></path>
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <div class="search-box">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <input type="text" id="searchInput" placeholder="Search flows..." oninput="filterFlows()">
+            </div>
+
+            <div id="flowList" class="flow-list">
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header id="mainHeader" class="main-header hidden">
+                <div class="header-top">
+                    <div class="header-left">
+                        <h1 id="detailTitle">Flow Name</h1>
+                        <span id="detailId" class="flow-id-badge">ID: #0</span>
+                    </div>
+                    <div class="header-right">
+                        <button class="action-btn" onclick="openDetailsModal()">View Details</button>
+                        <button id="toggleAllBtn" class="action-btn" onclick="toggleAllGroups()">Expand All</button>
+                        <span id="detailStatus" class="status-pill">Active</span>
+                        <span id="detailTime" class="time-label">00:00:00</span>
+                    </div>
+                </div>
+            </header>
+
+            <div id="timelineContainer" class="timeline-container">
+                <div class="empty-state">
+                    <div class="empty-icon">👋</div>
+                    <h2>Welcome to Flow</h2>
+                    <p>Select a flow from the sidebar to inspect its execution timeline.</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="detailsModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Flow Details</h2>
+                <button class="close-btn" onclick="closeDetailsModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="stats-grid">
+                    <div class="stat-card total">
+                        <div class="stat-number" id="modalTotal">0</div>
+                        <div class="stat-label">Total Points</div>
+                    </div>
+                    <div class="stat-card success">
+                        <div class="stat-number" id="modalSuccess">0</div>
+                        <div class="stat-label">Success</div>
+                    </div>
+                    <div class="stat-card error">
+                        <div class="stat-number" id="modalFail">0</div>
+                        <div class="stat-label">Failed</div>
+                    </div>
+                    <div class="stat-card warning">
+                        <div class="stat-number" id="modalMissing">0</div>
+                        <div class="stat-label">Missing Assertion</div>
+                    </div>
+                </div>
+
+                <div class="detailed-metrics">
+                    <div class="metric-row">
+                        <span>Orphan Assertions:</span>
+                        <span id="modalOrphans">0</span>
+                    </div>
+                    <div class="metric-row">
+                        <span>Duration:</span>
+                        <span id="modalDuration">0ms</span>
+                    </div>
+                    <div class="metric-row">
+                        <span>Coverage:</span>
+                        <span id="modalCoverage">0%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
