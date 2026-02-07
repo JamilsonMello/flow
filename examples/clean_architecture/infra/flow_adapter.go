@@ -7,14 +7,11 @@ import (
 	"fmt"
 )
 
-// FlowOrderObserver implements domain.OrderObserver
-// THIS is the only place where 'flow-tool' is imported.
 type FlowOrderObserver struct {
 	client *flow.FlowClient
 }
 
 func NewFlowOrderObserver(db *sql.DB, serviceName string) (*FlowOrderObserver, error) {
-	// isProduction = false for example
 	client, err := flow.NewClient(db, serviceName, false)
 	if err != nil {
 		return nil, err
@@ -25,14 +22,12 @@ func NewFlowOrderObserver(db *sql.DB, serviceName string) (*FlowOrderObserver, e
 func (o *FlowOrderObserver) OnOrderCreated(order domain.Order) {
 	fmt.Printf("[Infra] Flow Adapter intercepting Order %s\n", order.ID)
 
-	// Start Flow
 	f, err := o.client.Start(order.ID)
 	if err != nil {
 		fmt.Printf("Error starting flow: %v\n", err)
 		return
 	}
 
-	// Create Point
 	err = f.CreatePoint("Order Created", map[string]interface{}{
 		"id":     order.ID,
 		"amount": order.Amount,
