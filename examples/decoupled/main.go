@@ -15,7 +15,7 @@ type OrderService struct {
 }
 
 func (s *OrderService) CreateOrder(orderID string, amount float64) error {
-	f, _ := s.flowClient.Start(orderID)
+	f, _ := s.flowClient.Start("Create Order Flow", orderID)
 	f.CreatePoint("Order Created", map[string]interface{}{
 		"id":     orderID,
 		"amount": amount,

@@ -44,7 +44,7 @@ func main() {
 
 	fmt.Printf("Starting flow '%s'...\n", orderID)
 
-	f, err := client.Start(orderID)
+	f, err := client.Start("Order Processing", orderID)
 	if err != nil {
 		log.Fatalf("Failed to start flow: %v", err)
 	}

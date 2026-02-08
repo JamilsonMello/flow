@@ -142,34 +142,35 @@ import "github.com/seu-repo/flow/pkg/flow"
 ### Iniciando um Fluxo (Service A)
 ```go
 // 1. Iniciar o contexto do Flow
-ctx := context.Background()
 // Configuração via Struct
 client, _ := flow.NewClient(db, flow.FlowConfig{
     ServiceName:   "Service A",
     IsProduction:  os.Getenv("ENV") == "production",
     MaxExecutions: 100, // 0 = infinito
 })
-// Se já executou 100 vezes o mesmo nome de fluxo, ele pula automaticamente.
 
-// 2. Criar um novo rastreamento
-f, _ := client.Start("ORDER-123")
-// Se isProduction=true, 'f' será um objeto dummy que não faz nada.
+// 2. Criar um novo rastreamento com Identificador
+// O 1º argumento é o Nome do Fluxo (Tipo). O 2º é o Identificador Único (Instância).
+orderID := "ORDER-123"
+f, _ := client.Start("Order Flow", orderID)
 
 // 3. Definir o que esperamos que aconteça (Point)
 payload := map[string]interface{}{"amount": 100, "status": "pending"}
-f.AddPoint("Wait for Payment", payload, "Service A")
+f.CreatePoint("Wait for Payment", payload)
 ```
 
 ### Validando um Fluxo (Service B)
 ```go
-// 1. Recuperar o Flow existente
-f, _ := client.Get("ORDER-123")
+// 1. Recuperar o Flow existente usando o mesmo Nome e Identificador
+orderID := "ORDER-123" // Recebido via HTTP/Queue
+f, _ := client.GetFlow("Order Flow", orderID)
 
 // 2. Registrar o que realmente aconteceu (Assertion)
 actualPayload := map[string]interface{}{"amount": 100, "status": "paid"}
-f.Assert(actualPayload, "Service B")
+f.AddAssertion(actualPayload)
 
-// O Flow comparará automaticamente o Point vs Assertion na ordem de chegada.
+// 3. Finalizar e Validar
+result, _ := f.Finish() // Valida apenas este fluxo (Order Flow / ORDER-123)
 ```
 
 ---

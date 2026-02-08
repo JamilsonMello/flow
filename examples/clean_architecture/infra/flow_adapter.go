@@ -26,7 +26,7 @@ func NewFlowOrderObserver(db *sql.DB, serviceName string) (*FlowOrderObserver, e
 func (o *FlowOrderObserver) OnOrderCreated(order domain.Order) {
 	fmt.Printf("[Infra] Flow Adapter intercepting Order %s\n", order.ID)
 
-	f, err := o.client.Start(order.ID)
+	f, err := o.client.Start("Order Flow", order.ID)
 	if err != nil {
 		fmt.Printf("Error starting flow: %v\n", err)
 		return

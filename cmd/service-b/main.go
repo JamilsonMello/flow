@@ -31,13 +31,14 @@ func main() {
 	// In a real scenario, Service B would receive the ID via queue/http.
 	// Here we just pick the latest ACTIVE flow from DB to simulate processing the one just created.
 	var flowName string
-	err = db.QueryRow("SELECT name FROM flows WHERE status = 'ACTIVE' ORDER BY created_at DESC LIMIT 1").Scan(&flowName)
+	var identifier sql.NullString
+	err = db.QueryRow("SELECT name, identifier FROM flows WHERE status = 'ACTIVE' ORDER BY created_at DESC LIMIT 1").Scan(&flowName, &identifier)
 	if err != nil {
 		log.Fatalf("No active flow found to process. Run Service A first!")
 	}
 
-	fmt.Printf("Retrieving flow '%s'...\n", flowName)
-	f, err := client.GetFlow(flowName)
+	fmt.Printf("Retrieving flow '%s' (ID: %s)...\n", flowName, identifier.String)
+	f, err := client.GetFlow(flowName, identifier.String)
 	if err != nil {
 		log.Fatalf("Failed to get flow: %v", err)
 	}

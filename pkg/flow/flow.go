@@ -13,6 +13,7 @@ const schema = `
 CREATE TABLE IF NOT EXISTS flows (
     id BIGSERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
+    identifier VARCHAR(255),
     status VARCHAR(50) DEFAULT 'ACTIVE',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -37,6 +38,7 @@ CREATE TABLE IF NOT EXISTS assertions (
 CREATE INDEX IF NOT EXISTS idx_points_flow_id ON points(flow_id);
 CREATE INDEX IF NOT EXISTS idx_assertions_flow_id ON assertions(flow_id);
 CREATE INDEX IF NOT EXISTS idx_flows_name_status ON flows(name, status);
+CREATE INDEX IF NOT EXISTS idx_flows_identifier ON flows(identifier);
 `
 
 func NewClient(db *sql.DB, config FlowConfig) (*FlowClient, error) {
@@ -51,13 +53,19 @@ func NewClient(db *sql.DB, config FlowConfig) (*FlowClient, error) {
 	}, nil
 }
 
-func (c *FlowClient) Start(flowName string) (*FlowInstance, error) {
+func (c *FlowClient) Start(flowName string, identifier ...string) (*FlowInstance, error) {
 	if c.Config.IsProduction {
 		return &FlowInstance{client: c, Flow: &Flow{Name: flowName, Status: "SKIPPED"}}, nil
 	}
 
+	ident := ""
+	if len(identifier) > 0 {
+		ident = identifier[0]
+	}
+
 	if c.Config.MaxExecutions > 0 {
 		var count int
+		// Check global count for this Flow Name
 		err := c.DB.QueryRow("SELECT COUNT(*) FROM flows WHERE name = $1", flowName).Scan(&count)
 		if err != nil {
 			return nil, fmt.Errorf("failed to count flows: %v", err)
@@ -67,35 +75,70 @@ func (c *FlowClient) Start(flowName string) (*FlowInstance, error) {
 		}
 	}
 
-	_, err := c.DB.Exec("UPDATE flows SET status = 'INTERRUPTED' WHERE name = $1 AND status = 'ACTIVE'", flowName)
+	// Interrupt existing ACTIVE flow with same Name & Identifier
+	query := "UPDATE flows SET status = 'INTERRUPTED' WHERE name = $1 AND status = 'ACTIVE'"
+	args := []interface{}{flowName}
+	if ident != "" {
+		query += " AND identifier = $2"
+		args = append(args, ident)
+	} else {
+		query += " AND identifier IS NULL"
+	}
+
+	_, err := c.DB.Exec(query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to interrupt existing flow: %v", err)
 	}
 
 	var id int64
-	err = c.DB.QueryRow("INSERT INTO flows (name, status) VALUES ($1, 'ACTIVE') RETURNING id", flowName).Scan(&id)
+	insertQuery := "INSERT INTO flows (name, identifier, status) VALUES ($1, $2, 'ACTIVE') RETURNING id"
+	var identArg interface{} = ident
+	if ident == "" {
+		identArg = nil
+	}
+
+	err = c.DB.QueryRow(insertQuery, flowName, identArg).Scan(&id)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create flow: %v", err)
 	}
 
 	return &FlowInstance{
 		client: c,
-		Flow:   &Flow{ID: id, Name: flowName, Status: "ACTIVE"},
+		Flow:   &Flow{ID: id, Name: flowName, Identifier: ident, Status: "ACTIVE"},
 	}, nil
 }
 
-func (c *FlowClient) GetFlow(flowName string) (*FlowInstance, error) {
+func (c *FlowClient) GetFlow(flowName string, identifier ...string) (*FlowInstance, error) {
 	if c.Config.IsProduction {
 		return &FlowInstance{client: c, Flow: &Flow{Name: flowName, Status: "SKIPPED"}}, nil
 	}
 
+	ident := ""
+	if len(identifier) > 0 {
+		ident = identifier[0]
+	}
+
 	var f Flow
-	err := c.DB.QueryRow("SELECT id, name, status, created_at FROM flows WHERE name = $1 AND status = 'ACTIVE' ORDER BY id DESC LIMIT 1", flowName).Scan(
-		&f.ID, &f.Name, &f.Status, &f.CreatedAt,
+	query := "SELECT id, name, identifier, status, created_at FROM flows WHERE name = $1 AND status = 'ACTIVE'"
+	args := []interface{}{flowName}
+
+	if ident != "" {
+		query += " AND identifier = $2"
+		args = append(args, ident)
+	} else {
+		query += " AND identifier IS NULL"
+	}
+	query += " ORDER BY id DESC LIMIT 1"
+
+	var identSql sql.NullString
+	err := c.DB.QueryRow(query, args...).Scan(
+		&f.ID, &f.Name, &identSql, &f.Status, &f.CreatedAt,
 	)
+	f.Identifier = identSql.String
+
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("no active flow found with name '%s'", flowName)
+			return nil, fmt.Errorf("no active flow found with name '%s' and identifier '%s'", flowName, ident)
 		}
 		return nil, fmt.Errorf("error fetching flow: %v", err)
 	}
