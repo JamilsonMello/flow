@@ -72,7 +72,7 @@
                         </div>
                     </div>
                     <div class="header-right flex items-center gap-3">
-                        <button class="action-btn" onclick="openDetailsModal()">Analytics</button>
+
                         <button id="toggleAllBtn" class="action-btn" onclick="toggleAllGroups()">Expand All</button>
                         <span id="detailStatus" class="status-pill">Active</span>
                         <span id="detailTime" class="text-xs text-gray-400">00:00:00</span>
@@ -86,60 +86,7 @@
         </main>
     </div>
 
-    <!-- Improved Details Modal (Dark Mode) -->
-    <div id="detailsModal" class="modal-overlay hidden fixed inset-0 flex items-center justify-center z-50">
-        <div class="modal-content w-full max-w-2xl overflow-hidden transform transition-all">
-            <div class="modal-header px-6 py-4 flex justify-between items-center border-b border-gray-700">
-                <h2 class="text-lg font-bold text-gray-200">Flow Execution Analytics</h2>
-                <button class="text-gray-400 hover:text-white text-2xl" onclick="closeDetailsModal()">×</button>
-            </div>
-            <div class="modal-body p-6">
-                <!-- Top Stats -->
-                <div class="grid grid-cols-4 gap-4 mb-8">
-                    <div class="stat-card total bg-gray-800 border border-gray-700 p-4 rounded-lg text-center">
-                        <div class="text-2xl font-bold text-white" id="modalTotal">0</div>
-                        <div class="text-xs text-gray-400 uppercase tracking-wider font-semibold">Total Points</div>
-                    </div>
-                    <div class="stat-card success bg-gray-800 border border-green-900 p-4 rounded-lg text-center">
-                        <div class="text-2xl font-bold text-green-400" id="modalSuccess">0</div>
-                        <div class="text-xs text-green-600 uppercase tracking-wider font-semibold">Success</div>
-                    </div>
-                    <div class="stat-card error bg-gray-800 border border-red-900 p-4 rounded-lg text-center">
-                        <div class="text-2xl font-bold text-red-400" id="modalFail">0</div>
-                        <div class="text-xs text-red-600 uppercase tracking-wider font-semibold">Failed</div>
-                    </div>
-                    <div class="stat-card warning bg-gray-800 border border-yellow-900 p-4 rounded-lg text-center">
-                        <div class="text-2xl font-bold text-yellow-400" id="modalMissing">0</div>
-                        <div class="text-xs text-yellow-600 uppercase tracking-wider font-semibold">Missing</div>
-                    </div>
-                </div>
 
-                <!-- Secondary Metrics -->
-                <div class="border-t border-gray-700 pt-6">
-                    <h3 class="text-sm font-semibold text-gray-500 mb-4">PERFORMANCE & COVERAGE</h3>
-                    <div class="grid grid-cols-2 gap-6">
-                        <div class="flex items-center justify-between">
-                            <span class="text-gray-400">Throughput Duration</span>
-                            <span id="modalDuration" class="font-mono font-medium text-white">--</span>
-                        </div>
-                        <div class="flex items-center justify-between">
-                            <span class="text-gray-400">Assertions Coverage</span>
-                            <span id="modalCoverage" class="font-mono font-medium text-white">0%</span>
-                        </div>
-                        <div class="flex items-center justify-between">
-                            <span class="text-gray-400">Orphan Assertions</span>
-                            <span id="modalOrphans" class="font-mono font-medium text-white">0</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="bg-gray-900 px-6 py-4 border-t border-gray-700 text-center">
-                <button
-                    class="bg-gray-800 border border-gray-600 text-gray-300 font-medium py-2 px-4 rounded hover:bg-gray-700 transition-colors w-full"
-                    onclick="closeDetailsModal()">Close Report</button>
-            </div>
-        </div>
-    </div>
 
     <script src="app.js"></script>
 </body>

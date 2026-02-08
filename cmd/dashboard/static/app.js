@@ -1,7 +1,7 @@
 const API_BASE = 'http://localhost:8585/api';
 let allFlows = [];
 let currentFlowId = null;
-let currentStats = {};
+
 
 let flowPage = 1;
 let flowLimit = 20;
@@ -213,52 +213,13 @@ function renderTimeline(events, container, meta, reset) {
     const pointsList = events.filter(e => e.type === 'POINT');
     const assertionsList = events.filter(e => e.type === 'ASSERTION');
 
-    if (reset) {
-        currentStats = {
-            total: meta ? meta.total_points : pointsList.length,
-            success: 0,
-            fail: 0,
-            missing: 0,
-            orphans: 0,
-            duration: '--',
-            coverage: 0
-        };
-    }
 
-    // FIX: actually calculate success/fail
-    pointsList.forEach((p, i) => {
-        const a = assertionsList[i];
-        if (!a) {
-            if (reset) currentStats.missing++;
-        } else {
-            if (deepEqual(p.data.expected, a.data.actual)) {
-                if (reset) currentStats.success++;
-            } else {
-                if (reset) currentStats.fail++;
-            }
-        }
-    });
+
+
 
     // ... (Keep rest of renderTimeline logic)
 
-    const gTotalPoints = meta ? meta.total_points : pointsList.length;
-    const gTotalAssertions = meta ? meta.total_assertions : assertionsList.length;
 
-    if (reset) {
-        currentStats.orphans = Math.max(0, gTotalAssertions - gTotalPoints);
-        currentStats.coverage = gTotalPoints > 0
-            ? Math.round(((gTotalAssertions - currentStats.orphans) / gTotalPoints) * 100)
-            : 0;
-    }
-
-    if (reset && events.length > 0) {
-        // ... (Keep duration logic)
-        const times = events.map(e => new Date(e.timestamp).getTime());
-        const diffMs = Math.max(...times) - Math.min(...times);
-        if (diffMs < 1000) currentStats.duration = diffMs + 'ms';
-        else if (diffMs < 60000) currentStats.duration = (diffMs / 1000).toFixed(2) + 's';
-        else currentStats.duration = (diffMs / 60000).toFixed(1) + 'm';
-    }
 
     // ... (Keep rendering loop)
     const startOffset = meta ? (meta.page - 1) * meta.limit : 0;
@@ -354,20 +315,7 @@ function renderTimeline(events, container, meta, reset) {
 }
 
 // ... (Rest of file including deepEqual)
-function openDetailsModal() {
-    document.getElementById('modalTotal').textContent = currentStats.total || 0;
-    document.getElementById('modalSuccess').textContent = currentStats.success || 0;
-    document.getElementById('modalFail').textContent = currentStats.fail || 0;
-    document.getElementById('modalMissing').textContent = currentStats.missing || 0;
-    document.getElementById('modalOrphans').textContent = currentStats.orphans || 0;
-    document.getElementById('modalDuration').textContent = currentStats.duration || '--';
-    document.getElementById('modalCoverage').textContent = (currentStats.coverage || 0) + '%';
 
-    // Add logic to colorize modal?
-    const modal = document.getElementById('detailsModal');
-    // ...
-    modal.classList.remove('hidden');
-}
 
 // ...
 
@@ -459,44 +407,10 @@ function renderTimeline(events, container, meta, reset) {
     const pointsList = events.filter(e => e.type === 'POINT');
     const assertionsList = events.filter(e => e.type === 'ASSERTION');
 
-    if (reset) {
-        currentStats = {
-            total: meta ? meta.total_points : pointsList.length,
-            success: 0,
-            fail: 0,
-            missing: 0,
-            orphans: 0,
-            duration: '--',
-            coverage: 0
-        };
-    }
 
-    pointsList.forEach((p, i) => {
-        const a = assertionsList[i];
-        if (!a) {
-        } else {
-            if (deepEqual(p.data.expected, a.data.actual)) {
-            } else {
-            }
-        }
-    });
-    const gTotalPoints = meta ? meta.total_points : pointsList.length;
-    const gTotalAssertions = meta ? meta.total_assertions : assertionsList.length;
 
-    if (reset) {
-        currentStats.orphans = Math.max(0, gTotalAssertions - gTotalPoints);
-        currentStats.coverage = gTotalPoints > 0
-            ? Math.round(((gTotalAssertions - currentStats.orphans) / gTotalPoints) * 100)
-            : 0;
-    }
 
-    if (reset && events.length > 0) {
-        const times = events.map(e => new Date(e.timestamp).getTime());
-        const diffMs = Math.max(...times) - Math.min(...times);
-        if (diffMs < 1000) currentStats.duration = diffMs + 'ms';
-        else if (diffMs < 60000) currentStats.duration = (diffMs / 1000).toFixed(2) + 's';
-        else currentStats.duration = (diffMs / 60000).toFixed(1) + 'm';
-    }
+
 
     const startOffset = meta ? (meta.page - 1) * meta.limit : 0;
 
@@ -582,21 +496,7 @@ function toggleGroup(header) {
     group.classList.toggle('open');
 }
 
-function openDetailsModal() {
-    document.getElementById('modalTotal').textContent = currentStats.total || 0;
-    document.getElementById('modalSuccess').textContent = currentStats.success || 0;
-    document.getElementById('modalFail').textContent = currentStats.fail || 0;
-    document.getElementById('modalMissing').textContent = currentStats.missing || 0;
-    document.getElementById('modalOrphans').textContent = currentStats.orphans || 0;
-    document.getElementById('modalDuration').textContent = currentStats.duration || '--';
-    document.getElementById('modalCoverage').textContent = (currentStats.coverage || 0) + '%';
 
-    document.getElementById('detailsModal').classList.remove('hidden');
-}
-
-function closeDetailsModal() {
-    document.getElementById('detailsModal').classList.add('hidden');
-}
 
 function deepEqual(obj1, obj2) {
     if (obj1 === obj2) return true;
