@@ -4,11 +4,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Flow | Distributed Tracing</title>
+    <title>Flow | Distributed Tracing PRO</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <style>
+        /* Custom Overrides */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .modal-overlay {
+            background-color: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+        }
+    </style>
 </head>
 
 <body>
@@ -16,16 +32,15 @@
         <aside class="sidebar">
             <div class="sidebar-header">
                 <div class="brand">
-                    <div class="logo-icon">F</div>
-                    <span>Flow</span>
+                    <div class="logo-icon bg-indigo-600">F</div>
+                    <span class="font-bold">Flow</span>
                 </div>
                 <div class="controls">
                     <button id="refreshBtn" class="icon-btn" title="Refresh" onclick="refreshFlows()">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path d="M23 4v6h-6"></path>
-                            <path d="M1 20v-6h6"></path>
-                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
+                            </path>
                         </svg>
                     </button>
                 </div>
@@ -45,70 +60,83 @@
 
         <main class="main-content">
             <header id="mainHeader" class="main-header hidden">
-                <div class="header-top">
+                <div class="header-top flex justify-between items-center p-4">
                     <div class="header-left">
-                        <h1 id="detailTitle">Flow Name</h1>
-                        <span id="detailId" class="flow-id-badge">ID: #0</span>
+                        <h1 id="detailTitle" class="text-xl font-bold text-white">Flow Name</h1>
+                        <div class="flex items-center gap-2 mt-1">
+                            <span id="detailId"
+                                class="text-xs bg-gray-800 text-gray-400 px-2 py-1 rounded border border-gray-700">ID:
+                                #0</span>
+                            <span id="detailIdentifier"
+                                class="text-xs bg-indigo-900 text-indigo-300 px-2 py-1 rounded hidden font-mono border border-indigo-700">Identifier</span>
+                        </div>
                     </div>
-                    <div class="header-right">
-                        <button class="action-btn" onclick="openDetailsModal()">View Details</button>
+                    <div class="header-right flex items-center gap-3">
+                        <button class="action-btn" onclick="openDetailsModal()">Analytics</button>
                         <button id="toggleAllBtn" class="action-btn" onclick="toggleAllGroups()">Expand All</button>
                         <span id="detailStatus" class="status-pill">Active</span>
-                        <span id="detailTime" class="time-label">00:00:00</span>
+                        <span id="detailTime" class="text-xs text-gray-400">00:00:00</span>
                     </div>
                 </div>
             </header>
 
-            <div id="timelineContainer" class="timeline-container">
-                <div class="empty-state">
-                    <div class="empty-icon">👋</div>
-                    <h2>Welcome to Flow</h2>
-                    <p>Select a flow from the sidebar to inspect its execution timeline.</p>
-                </div>
+            <div id="timelineContainer" class="timeline-container p-6">
+                <!-- Content injected by JS -->
             </div>
         </main>
     </div>
 
-    <div id="detailsModal" class="modal-overlay hidden">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>Flow Details</h2>
-                <button class="close-btn" onclick="closeDetailsModal()">×</button>
+    <!-- Improved Details Modal (Dark Mode) -->
+    <div id="detailsModal" class="modal-overlay hidden fixed inset-0 flex items-center justify-center z-50">
+        <div class="modal-content w-full max-w-2xl overflow-hidden transform transition-all">
+            <div class="modal-header px-6 py-4 flex justify-between items-center border-b border-gray-700">
+                <h2 class="text-lg font-bold text-gray-200">Flow Execution Analytics</h2>
+                <button class="text-gray-400 hover:text-white text-2xl" onclick="closeDetailsModal()">×</button>
             </div>
-            <div class="modal-body">
-                <div class="stats-grid">
-                    <div class="stat-card total">
-                        <div class="stat-number" id="modalTotal">0</div>
-                        <div class="stat-label">Total Points</div>
+            <div class="modal-body p-6">
+                <!-- Top Stats -->
+                <div class="grid grid-cols-4 gap-4 mb-8">
+                    <div class="stat-card total bg-gray-800 border border-gray-700 p-4 rounded-lg text-center">
+                        <div class="text-2xl font-bold text-white" id="modalTotal">0</div>
+                        <div class="text-xs text-gray-400 uppercase tracking-wider font-semibold">Total Points</div>
                     </div>
-                    <div class="stat-card success">
-                        <div class="stat-number" id="modalSuccess">0</div>
-                        <div class="stat-label">Success</div>
+                    <div class="stat-card success bg-gray-800 border border-green-900 p-4 rounded-lg text-center">
+                        <div class="text-2xl font-bold text-green-400" id="modalSuccess">0</div>
+                        <div class="text-xs text-green-600 uppercase tracking-wider font-semibold">Success</div>
                     </div>
-                    <div class="stat-card error">
-                        <div class="stat-number" id="modalFail">0</div>
-                        <div class="stat-label">Failed</div>
+                    <div class="stat-card error bg-gray-800 border border-red-900 p-4 rounded-lg text-center">
+                        <div class="text-2xl font-bold text-red-400" id="modalFail">0</div>
+                        <div class="text-xs text-red-600 uppercase tracking-wider font-semibold">Failed</div>
                     </div>
-                    <div class="stat-card warning">
-                        <div class="stat-number" id="modalMissing">0</div>
-                        <div class="stat-label">Missing Assertion</div>
+                    <div class="stat-card warning bg-gray-800 border border-yellow-900 p-4 rounded-lg text-center">
+                        <div class="text-2xl font-bold text-yellow-400" id="modalMissing">0</div>
+                        <div class="text-xs text-yellow-600 uppercase tracking-wider font-semibold">Missing</div>
                     </div>
                 </div>
 
-                <div class="detailed-metrics">
-                    <div class="metric-row">
-                        <span>Orphan Assertions:</span>
-                        <span id="modalOrphans">0</span>
-                    </div>
-                    <div class="metric-row">
-                        <span>Duration:</span>
-                        <span id="modalDuration">0ms</span>
-                    </div>
-                    <div class="metric-row">
-                        <span>Coverage:</span>
-                        <span id="modalCoverage">0%</span>
+                <!-- Secondary Metrics -->
+                <div class="border-t border-gray-700 pt-6">
+                    <h3 class="text-sm font-semibold text-gray-500 mb-4">PERFORMANCE & COVERAGE</h3>
+                    <div class="grid grid-cols-2 gap-6">
+                        <div class="flex items-center justify-between">
+                            <span class="text-gray-400">Throughput Duration</span>
+                            <span id="modalDuration" class="font-mono font-medium text-white">--</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-gray-400">Assertions Coverage</span>
+                            <span id="modalCoverage" class="font-mono font-medium text-white">0%</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-gray-400">Orphan Assertions</span>
+                            <span id="modalOrphans" class="font-mono font-medium text-white">0</span>
+                        </div>
                     </div>
                 </div>
+            </div>
+            <div class="bg-gray-900 px-6 py-4 border-t border-gray-700 text-center">
+                <button
+                    class="bg-gray-800 border border-gray-600 text-gray-300 font-medium py-2 px-4 rounded hover:bg-gray-700 transition-colors w-full"
+                    onclick="closeDetailsModal()">Close Report</button>
             </div>
         </div>
     </div>

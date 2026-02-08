@@ -116,6 +116,8 @@ function renderFlowList(append = false) {
     }
 }
 
+// ... (Keep existing code above)
+
 function renderFlowItem(f, container) {
     const el = document.createElement('div');
     el.className = `flow-item ${currentFlowId === f.id ? 'active' : ''}`;
@@ -129,14 +131,18 @@ function renderFlowItem(f, container) {
     const dateStr = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
     const timeStr = date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 
+    // Show identifier if present
+    const idHtml = f.identifier ? `<div class="flow-identifier" title="${f.identifier}">${f.identifier}</div>` : '';
+
     el.innerHTML = `
         <div class="flow-header">
             <span class="flow-name">${f.name}</span>
             <span class="flow-id">#${f.id}</span>
         </div>
+        ${idHtml}
         <div class="flow-footer">
             <span class="status-badge ${statusClass}">${f.status}</span>
-            <div class="flow-date" title="${date.toLocaleString()}">
+            <div class="flow-date">
                 <span>${dateStr}</span>
                 <span style="opacity:0.5">•</span>
                 <span>${timeStr}</span>
@@ -145,6 +151,225 @@ function renderFlowItem(f, container) {
     `;
     container.appendChild(el);
 }
+
+// ... (Keep intermediate code)
+
+async function selectFlow(flow, el, page = 1) {
+    if (flow.id !== currentFlowId) {
+        page = 1;
+        timelinePage = 1;
+        document.getElementById('timelineContainer').innerHTML = '';
+    }
+
+    currentFlowId = flow.id;
+    timelinePage = page;
+    allExpanded = false;
+
+    const btn = document.getElementById('toggleAllBtn');
+    if (btn) btn.textContent = 'Expand All';
+
+    document.querySelectorAll('.flow-item').forEach(e => e.classList.remove('active'));
+    if (el) el.classList.add('active');
+
+    document.getElementById('mainHeader').classList.remove('hidden');
+    document.getElementById('detailTitle').textContent = flow.name;
+    document.getElementById('detailId').textContent = `ID: #${flow.id}`;
+
+    // Update Identifier Badge in Detail Header
+    const identEl = document.getElementById('detailIdentifier');
+    if (identEl) {
+        if (flow.identifier) {
+            identEl.textContent = flow.identifier;
+            identEl.classList.remove('hidden');
+        } else {
+            identEl.classList.add('hidden');
+        }
+    }
+
+    const statusEl = document.getElementById('detailStatus');
+    statusEl.textContent = flow.status;
+    let statusClass = 'status-finished';
+    if (flow.status === 'ACTIVE') statusClass = 'status-active';
+    else if (flow.status === 'INTERRUPTED') statusClass = 'status-interrupted';
+    statusEl.className = `status-pill ${statusClass}`;
+    document.getElementById('detailTime').textContent = new Date(flow.created_at).toLocaleString();
+
+    const container = document.getElementById('timelineContainer');
+    if (page === 1) {
+        container.innerHTML = '<div style="padding:40px;text-align:center;color:#8b949e">Loading timeline...</div>';
+    }
+
+    await loadMoreTimeline(page === 1);
+}
+
+// ... (Keep existing loadMoreTimeline)
+
+function renderTimeline(events, container, meta, reset) {
+    if (reset && (!events || events.length === 0)) {
+        container.innerHTML = '<div class="empty-state"><h3>No events recorded</h3></div>';
+        return;
+    }
+
+    const pointsList = events.filter(e => e.type === 'POINT');
+    const assertionsList = events.filter(e => e.type === 'ASSERTION');
+
+    if (reset) {
+        currentStats = {
+            total: meta ? meta.total_points : pointsList.length,
+            success: 0,
+            fail: 0,
+            missing: 0,
+            orphans: 0,
+            duration: '--',
+            coverage: 0
+        };
+    }
+
+    // FIX: actually calculate success/fail
+    pointsList.forEach((p, i) => {
+        const a = assertionsList[i];
+        if (!a) {
+            if (reset) currentStats.missing++;
+        } else {
+            if (deepEqual(p.data.expected, a.data.actual)) {
+                if (reset) currentStats.success++;
+            } else {
+                if (reset) currentStats.fail++;
+            }
+        }
+    });
+
+    // ... (Keep rest of renderTimeline logic)
+
+    const gTotalPoints = meta ? meta.total_points : pointsList.length;
+    const gTotalAssertions = meta ? meta.total_assertions : assertionsList.length;
+
+    if (reset) {
+        currentStats.orphans = Math.max(0, gTotalAssertions - gTotalPoints);
+        currentStats.coverage = gTotalPoints > 0
+            ? Math.round(((gTotalAssertions - currentStats.orphans) / gTotalPoints) * 100)
+            : 0;
+    }
+
+    if (reset && events.length > 0) {
+        // ... (Keep duration logic)
+        const times = events.map(e => new Date(e.timestamp).getTime());
+        const diffMs = Math.max(...times) - Math.min(...times);
+        if (diffMs < 1000) currentStats.duration = diffMs + 'ms';
+        else if (diffMs < 60000) currentStats.duration = (diffMs / 1000).toFixed(2) + 's';
+        else currentStats.duration = (diffMs / 60000).toFixed(1) + 'm';
+    }
+
+    // ... (Keep rendering loop)
+    const startOffset = meta ? (meta.page - 1) * meta.limit : 0;
+
+    pointsList.forEach((p, index) => {
+        // ... (standard rendering)
+        const a = assertionsList[index];
+        const groupIndex = startOffset + index + 1;
+
+        const el = document.createElement('div');
+        el.className = 'timeline-row';
+
+        const service = p.data.service_name || 'System';
+
+        let assertionHtml = '';
+        let rowStatusClass = '';
+
+        if (!a) {
+            assertionHtml = `<div style="padding:30px; text-align:center; color:#8b949e; font-style:italic">⏳ Waiting for assertion...</div>`;
+            rowStatusClass = 'row-pending';
+        } else {
+            // Diff Check inside rendering to colorize
+            const isMatch = deepEqual(p.data.expected, a.data.actual);
+            const matchClass = isMatch ? 'match-success' : 'match-fail';
+            const icon = isMatch ? '✓' : '⚠';
+            rowStatusClass = isMatch ? 'row-success' : 'row-fail';
+
+            assertionHtml = `
+                    <div class="assertion-container ${matchClass}">
+                        <div class="assertion-header">
+                             <div class="check-icon">${icon}</div>
+                             <span>${isMatch ? 'Assertion Match' : 'Discrepancy Found'}</span>
+                             <span class="service-tag" style="margin-left:auto">${a.data.service_name || 'Unknown'}</span>
+                             <span class="timestamp" style="margin:0">${new Date(a.timestamp).toLocaleTimeString()}</span>
+                        </div>
+                        <div class="comparison-grid">
+                            <div class="grid-col">
+                                <h4>Expected <span>(Promise)</span></h4>
+                                <div class="code-block">${JSON.stringify(p.data.expected, null, 2)}</div>
+                            </div>
+                            <div class="grid-col">
+                                <h4>Actual <span>(Reality)</span></h4>
+                                <div class="code-block diff">${JSON.stringify(a.data.actual, null, 2)}</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+        }
+
+        // ... (Timeline Row innerHTML construction)
+        // I need to preserve the onclick toggling but maybe auto-open failures?
+
+        el.innerHTML = `
+            <div class="timeline-track">
+                <div class="track-line"></div>
+                <div class="point-icon ${rowStatusClass}">${groupIndex}</div>
+            </div>
+            <div class="timeline-group ${rowStatusClass}">
+                <div class="point-header" onclick="toggleGroup(this)">
+                    <div class="point-info">
+                        <div class="point-title">${p.data.description}</div>
+                    </div>
+                    <div class="point-right-col">
+                        <span class="label-pill pill-point">POINT</span>
+                        <div class="point-meta-row">
+                            <span class="service-tag">${service}</span>
+                            <span class="timestamp">${new Date(p.timestamp).toLocaleTimeString()}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="waterfall-content">
+                    ${assertionHtml}
+                </div>
+            </div>
+        `;
+        container.appendChild(el);
+    });
+
+    // ... (Orphans logic keep same)
+    if (assertionsList.length > pointsList.length) {
+        const orphans = assertionsList.slice(pointsList.length);
+        orphans.forEach(o => {
+            const el = document.createElement('div');
+            el.className = 'orphan-card';
+            el.innerHTML = `
+                <div class="orphan-title">⚠ Orphan Assertion</div>
+                <div class="code-block">${JSON.stringify(o.data.actual, null, 2)}</div>
+                <div class="timestamp">${new Date(o.timestamp).toLocaleTimeString()}</div>
+            `;
+            container.appendChild(el);
+        });
+    }
+}
+
+// ... (Rest of file including deepEqual)
+function openDetailsModal() {
+    document.getElementById('modalTotal').textContent = currentStats.total || 0;
+    document.getElementById('modalSuccess').textContent = currentStats.success || 0;
+    document.getElementById('modalFail').textContent = currentStats.fail || 0;
+    document.getElementById('modalMissing').textContent = currentStats.missing || 0;
+    document.getElementById('modalOrphans').textContent = currentStats.orphans || 0;
+    document.getElementById('modalDuration').textContent = currentStats.duration || '--';
+    document.getElementById('modalCoverage').textContent = (currentStats.coverage || 0) + '%';
+
+    // Add logic to colorize modal?
+    const modal = document.getElementById('detailsModal');
+    // ...
+    modal.classList.remove('hidden');
+}
+
+// ...
 
 function filterFlows() {
     refreshFlows();

@@ -18,10 +18,11 @@ import (
 )
 
 type Flow struct {
-	ID        int64     `json:"id"`
-	Name      string    `json:"name"`
-	Status    string    `json:"status"`
-	CreatedAt time.Time `json:"created_at"`
+	ID         int64     `json:"id"`
+	Name       string    `json:"name"`
+	Identifier string    `json:"identifier"` // Added
+	Status     string    `json:"status"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 type Point struct {
@@ -83,7 +84,7 @@ func main() {
 		var total int
 		db.QueryRow("SELECT COUNT(*) FROM flows").Scan(&total)
 
-		rows, err := db.Query("SELECT id, name, status, created_at FROM flows ORDER BY created_at DESC LIMIT $1 OFFSET $2", limit, offset)
+		rows, err := db.Query("SELECT id, name, identifier, status, created_at FROM flows ORDER BY created_at DESC LIMIT $1 OFFSET $2", limit, offset)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
@@ -93,9 +94,11 @@ func main() {
 		var flows []Flow = []Flow{}
 		for rows.Next() {
 			var f Flow
-			if err := rows.Scan(&f.ID, &f.Name, &f.Status, &f.CreatedAt); err != nil {
+			var ident sql.NullString
+			if err := rows.Scan(&f.ID, &f.Name, &ident, &f.Status, &f.CreatedAt); err != nil {
 				continue
 			}
+			f.Identifier = ident.String
 			flows = append(flows, f)
 		}
 
