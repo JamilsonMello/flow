@@ -4,27 +4,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Flow | Distributed Tracing PRO</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Flow | Contract Testing Dashboard</title>
     <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" href="style.css">
-    <style>
-        /* Custom Overrides */
-        body {
-            font-family: 'Inter', sans-serif;
-        }
-
-        .mono {
-            font-family: 'JetBrains Mono', monospace;
-        }
-
-        .modal-overlay {
-            background-color: rgba(0, 0, 0, 0.5);
-            backdrop-filter: blur(4px);
-        }
-    </style>
 </head>
 
 <body>
@@ -32,17 +16,38 @@
         <aside class="sidebar">
             <div class="sidebar-header">
                 <div class="brand">
-                    <div class="logo-icon bg-indigo-600">F</div>
-                    <span class="font-bold">Flow</span>
+                    <div class="logo-icon">F</div>
+                    <span>Flow</span>
+                    <span class="version-tag">v2</span>
                 </div>
                 <div class="controls">
-                    <button id="refreshBtn" class="icon-btn" title="Refresh" onclick="refreshFlows()">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <button class="icon-btn" title="Refresh" onclick="refreshFlows()">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
                             </path>
                         </svg>
                     </button>
+                </div>
+            </div>
+
+            <!-- Stats Cards -->
+            <div id="statsBar" class="stats-bar">
+                <div class="stat-card">
+                    <span class="stat-value" id="statTotal">-</span>
+                    <span class="stat-label">Total</span>
+                </div>
+                <div class="stat-card stat-active">
+                    <span class="stat-value" id="statActive">-</span>
+                    <span class="stat-label">Active</span>
+                </div>
+                <div class="stat-card stat-success">
+                    <span class="stat-value" id="statFinished">-</span>
+                    <span class="stat-label">Finished</span>
+                </div>
+                <div class="stat-card stat-danger">
+                    <span class="stat-value" id="statInterrupted">-</span>
+                    <span class="stat-label">Interrupted</span>
                 </div>
             </div>
 
@@ -54,39 +59,90 @@
                 <input type="text" id="searchInput" placeholder="Search flows..." oninput="filterFlows()">
             </div>
 
-            <div id="flowList" class="flow-list">
+            <!-- Status Filter -->
+            <div class="filter-bar">
+                <button class="filter-btn active" onclick="setStatusFilter('', this)">All</button>
+                <button class="filter-btn" onclick="setStatusFilter('ACTIVE', this)">Active</button>
+                <button class="filter-btn" onclick="setStatusFilter('FINISHED', this)">Finished</button>
+                <button class="filter-btn" onclick="setStatusFilter('INTERRUPTED', this)">Interrupted</button>
             </div>
+
+            <div id="flowList" class="flow-list"></div>
         </aside>
 
         <main class="main-content">
-            <header id="mainHeader" class="main-header hidden">
-                <div class="header-top flex justify-between items-center p-4">
-                    <div class="header-left">
-                        <h1 id="detailTitle" class="text-xl font-bold text-white">Flow Name</h1>
-                        <div class="flex items-center gap-2 mt-1">
-                            <span id="detailId"
-                                class="text-xs bg-gray-800 text-gray-400 px-2 py-1 rounded border border-gray-700">ID:
-                                #0</span>
-                            <span id="detailIdentifier"
-                                class="text-xs bg-indigo-900 text-indigo-300 px-2 py-1 rounded hidden font-mono border border-indigo-700">Identifier</span>
+            <!-- Empty State -->
+            <div id="emptyState" class="empty-state">
+                <div class="empty-icon">⚡</div>
+                <h2>Flow Dashboard</h2>
+                <p>Select a flow from the sidebar to view its timeline</p>
+            </div>
+
+            <!-- Detail View -->
+            <div id="detailView" class="detail-view hidden">
+                <header id="mainHeader" class="main-header">
+                    <div class="header-top">
+                        <div class="header-left">
+                            <h1 id="detailTitle">Flow Name</h1>
+                            <div class="header-badges">
+                                <span id="detailId" class="badge badge-id">#0</span>
+                                <span id="detailIdentifier" class="badge badge-identifier hidden">Identifier</span>
+                                <span id="detailService" class="badge badge-service hidden">Service</span>
+                            </div>
+                        </div>
+                        <div class="header-right">
+                            <button id="compareBtn" class="action-btn compare-btn" onclick="runCompare()">
+                                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4">
+                                    </path>
+                                </svg>
+                                Compare
+                            </button>
+                            <button id="toggleAllBtn" class="action-btn" onclick="toggleAllGroups()">Expand All</button>
+                            <span id="detailStatus" class="status-pill">Active</span>
+                            <span id="detailTime" class="meta-time">00:00:00</span>
                         </div>
                     </div>
-                    <div class="header-right flex items-center gap-3">
-
-                        <button id="toggleAllBtn" class="action-btn" onclick="toggleAllGroups()">Expand All</button>
-                        <span id="detailStatus" class="status-pill">Active</span>
-                        <span id="detailTime" class="text-xs text-gray-400">00:00:00</span>
+                    <!-- Flow Summary Bar -->
+                    <div id="flowSummary" class="flow-summary">
+                        <div class="summary-item">
+                            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <path d="M12 6v6l4 2"></path>
+                            </svg>
+                            <span id="summaryTime">-</span>
+                        </div>
+                        <div class="summary-item">
+                            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            <span id="summaryPoints">0 points</span>
+                        </div>
+                        <div class="summary-item">
+                            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            <span id="summaryAssertions">0 assertions</span>
+                        </div>
                     </div>
-                </div>
-            </header>
+                </header>
 
-            <div id="timelineContainer" class="timeline-container p-6">
-                <!-- Content injected by JS -->
+                <!-- Compare Results Panel -->
+                <div id="comparePanel" class="compare-panel hidden">
+                    <div class="compare-header">
+                        <h3>🔍 Multi-Diff Comparison</h3>
+                        <button class="close-btn" onclick="closeCompare()">✕</button>
+                    </div>
+                    <div id="compareResults" class="compare-results"></div>
+                </div>
+
+                <div id="timelineContainer" class="timeline-container"></div>
             </div>
         </main>
     </div>
-
-
 
     <script src="app.js"></script>
 </body>

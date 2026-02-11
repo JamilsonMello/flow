@@ -1,61 +1,59 @@
 package flow
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"time"
-
-	_ "github.com/lib/pq"
 )
 
-const schema = `
-CREATE TABLE IF NOT EXISTS flows (
-    id BIGSERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    identifier VARCHAR(255),
-    status VARCHAR(50) DEFAULT 'ACTIVE',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS points (
-    id BIGSERIAL PRIMARY KEY,
-    flow_id BIGINT REFERENCES flows(id) ON DELETE CASCADE,
-    description TEXT,
-    expected JSONB,
-    service_name VARCHAR(255),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS assertions (
-    id BIGSERIAL PRIMARY KEY,
-    flow_id BIGINT REFERENCES flows(id) ON DELETE CASCADE,
-    actual JSONB,
-    service_name VARCHAR(255),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_points_flow_id ON points(flow_id);
-CREATE INDEX IF NOT EXISTS idx_assertions_flow_id ON assertions(flow_id);
-CREATE INDEX IF NOT EXISTS idx_flows_name_status ON flows(name, status);
-CREATE INDEX IF NOT EXISTS idx_flows_identifier ON flows(identifier);
-`
-
-func NewClient(db *sql.DB, config FlowConfig) (*FlowClient, error) {
-	if !config.IsProduction {
-		if _, err := db.Exec(schema); err != nil {
-			return nil, fmt.Errorf("failed to apply schema: %v", err)
-		}
-	}
-	return &FlowClient{
-		DB:     db,
-		Config: config,
-	}, nil
+type FlowClient struct {
+	DB      *sql.DB
+	Config  FlowConfig
+	storage *pgStorage
+	cache   *flowCache
+	logger  Logger
 }
 
-func (c *FlowClient) Start(flowName string, identifier ...string) (*FlowInstance, error) {
+type flowInstance struct {
+	client    *FlowClient
+	Flow      *Flow
+	startTime time.Time
+}
+
+func NewClient(db *sql.DB, config FlowConfig) (*FlowClient, error) {
+	client := &FlowClient{
+		DB:      db,
+		Config:  config,
+		storage: newPGStorage(db),
+		cache:   newFlowCache(config.CacheEnabled, config.MaxCacheSize),
+		logger:  noopLogger{},
+	}
+
+	if !config.IsProduction {
+		if err := client.storage.ApplySchema(context.Background()); err != nil {
+			return nil, err
+		}
+	}
+
+	return client, nil
+}
+
+func (c *FlowClient) Close() error {
+	c.cache.Clear()
+	c.logger.Info("FlowClient closed")
+	return nil
+}
+
+func isSkipped(status string) bool {
+	return len(status) >= 7 && status[:7] == "SKIPPED"
+}
+
+func (c *FlowClient) Start(ctx context.Context, flowName string, identifier ...string) (*flowInstance, error) {
 	if c.Config.IsProduction {
-		return &FlowInstance{client: c, Flow: &Flow{Name: flowName, Status: "SKIPPED"}}, nil
+		c.logger.Debug("Production mode: skipping flow '%s'", flowName)
+		return &flowInstance{client: c, Flow: &Flow{Name: flowName, Status: "SKIPPED"}, startTime: time.Now()}, nil
 	}
 
 	ident := ""
@@ -64,53 +62,40 @@ func (c *FlowClient) Start(flowName string, identifier ...string) (*FlowInstance
 	}
 
 	if c.Config.MaxExecutions > 0 {
-		var count int
-		// Check global count for this Flow Name
-		err := c.DB.QueryRow("SELECT COUNT(*) FROM flows WHERE name = $1", flowName).Scan(&count)
+		count, err := c.storage.CountFlowsByName(ctx, flowName)
 		if err != nil {
-			return nil, fmt.Errorf("failed to count flows: %v", err)
+			return nil, &FlowError{Op: "Start", FlowName: flowName, Err: err}
 		}
 		if count >= c.Config.MaxExecutions {
-			return &FlowInstance{client: c, Flow: &Flow{Name: flowName, Status: "SKIPPED_LIMIT"}}, nil
+			c.logger.Info("Limit reached for flow '%s' (%d/%d)", flowName, count, c.Config.MaxExecutions)
+			return &flowInstance{client: c, Flow: &Flow{Name: flowName, Status: "SKIPPED_LIMIT"}, startTime: time.Now()}, nil
 		}
 	}
 
-	// Interrupt existing ACTIVE flow with same Name & Identifier
-	query := "UPDATE flows SET status = 'INTERRUPTED' WHERE name = $1 AND status = 'ACTIVE'"
-	args := []interface{}{flowName}
-	if ident != "" {
-		query += " AND identifier = $2"
-		args = append(args, ident)
-	} else {
-		query += " AND identifier IS NULL"
+	if err := c.storage.InterruptActiveFlows(ctx, flowName, ident); err != nil {
+		return nil, &FlowError{Op: "Start", FlowName: flowName, Err: err}
 	}
+	c.cache.Delete(flowName, ident)
 
-	_, err := c.DB.Exec(query, args...)
+	id, err := c.storage.InsertFlow(ctx, flowName, ident, c.Config.ServiceName)
 	if err != nil {
-		return nil, fmt.Errorf("failed to interrupt existing flow: %v", err)
+		return nil, &FlowError{Op: "Start", FlowName: flowName, Err: err}
 	}
 
-	var id int64
-	insertQuery := "INSERT INTO flows (name, identifier, status) VALUES ($1, $2, 'ACTIVE') RETURNING id"
-	var identArg interface{} = ident
-	if ident == "" {
-		identArg = nil
-	}
+	f := &Flow{ID: id, Name: flowName, Identifier: ident, Status: "ACTIVE", Service: c.Config.ServiceName}
+	c.cache.Set(flowName, ident, f)
+	c.logger.Info("Flow started: '%s' (id=%d)", flowName, id)
 
-	err = c.DB.QueryRow(insertQuery, flowName, identArg).Scan(&id)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create flow: %v", err)
-	}
-
-	return &FlowInstance{
-		client: c,
-		Flow:   &Flow{ID: id, Name: flowName, Identifier: ident, Status: "ACTIVE"},
+	return &flowInstance{
+		client:    c,
+		Flow:      f,
+		startTime: time.Now(),
 	}, nil
 }
 
-func (c *FlowClient) GetFlow(flowName string, identifier ...string) (*FlowInstance, error) {
+func (c *FlowClient) GetFlow(ctx context.Context, flowName string, identifier ...string) (*flowInstance, error) {
 	if c.Config.IsProduction {
-		return &FlowInstance{client: c, Flow: &Flow{Name: flowName, Status: "SKIPPED"}}, nil
+		return &flowInstance{client: c, Flow: &Flow{Name: flowName, Status: "SKIPPED"}, startTime: time.Now()}, nil
 	}
 
 	ident := ""
@@ -118,131 +103,99 @@ func (c *FlowClient) GetFlow(flowName string, identifier ...string) (*FlowInstan
 		ident = identifier[0]
 	}
 
-	var f Flow
-	query := "SELECT id, name, identifier, status, created_at FROM flows WHERE name = $1 AND status = 'ACTIVE'"
-	args := []interface{}{flowName}
-
-	if ident != "" {
-		query += " AND identifier = $2"
-		args = append(args, ident)
-	} else {
-		query += " AND identifier IS NULL"
+	if cached, ok := c.cache.Get(flowName, ident); ok {
+		c.logger.Debug("Cache hit for flow '%s'", flowName)
+		return &flowInstance{client: c, Flow: cached, startTime: time.Now()}, nil
 	}
-	query += " ORDER BY id DESC LIMIT 1"
 
-	var identSql sql.NullString
-	err := c.DB.QueryRow(query, args...).Scan(
-		&f.ID, &f.Name, &identSql, &f.Status, &f.CreatedAt,
-	)
-	f.Identifier = identSql.String
-
+	f, err := c.storage.FindActiveFlow(ctx, flowName, ident)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("no active flow found with name '%s' and identifier '%s'", flowName, ident)
+		if IsNotFound(err) && c.Config.MaxExecutions > 0 {
+			count, countErr := c.storage.CountFlowsByName(ctx, flowName)
+			if countErr == nil && count >= c.Config.MaxExecutions {
+				c.logger.Info("GetFlow: flow '%s' reached execution limit (%d/%d), skipping", flowName, count, c.Config.MaxExecutions)
+				return &flowInstance{client: c, Flow: &Flow{Name: flowName, Status: "SKIPPED_LIMIT"}, startTime: time.Now()}, nil
+			}
 		}
-		return nil, fmt.Errorf("error fetching flow: %v", err)
+		return nil, err
 	}
-	return &FlowInstance{client: c, Flow: &f}, nil
+
+	c.cache.Set(flowName, ident, f)
+	return &flowInstance{client: c, Flow: f, startTime: time.Now()}, nil
 }
 
-func (f *FlowInstance) CreatePoint(description string, expected interface{}) error {
-	if f.client.Config.IsProduction || (len(f.Flow.Status) >= 7 && f.Flow.Status[:7] == "SKIPPED") {
+func (f *flowInstance) GetFlowInfo() *Flow {
+	return f.Flow
+}
+
+func (f *flowInstance) CreatePoint(ctx context.Context, description string, expected interface{}, opts ...PointOption) error {
+	if f.client.Config.IsProduction || isSkipped(f.Flow.Status) {
 		return nil
 	}
 
 	expectedJSON, err := json.Marshal(expected)
 	if err != nil {
-		return fmt.Errorf("failed to marshal expected value: %v", err)
+		return fmt.Errorf("failed to marshal expected value: %w", err)
 	}
 
-	_, err = f.client.DB.Exec("INSERT INTO points (flow_id, description, expected, service_name) VALUES ($1, $2, $3, $4)",
-		f.Flow.ID, description, expectedJSON, f.client.Config.ServiceName)
-
-	if err != nil {
-		return fmt.Errorf("failed to create point: %v", err)
+	p := &Point{
+		FlowID:      f.Flow.ID,
+		Description: description,
+		Expected:    expectedJSON,
+		ServiceName: f.client.Config.ServiceName,
 	}
+
+	for _, opt := range opts {
+		opt(p)
+	}
+
+	if err := f.client.storage.InsertPoint(ctx, p); err != nil {
+		return &FlowError{Op: "CreatePoint", FlowName: f.Flow.Name, Err: err}
+	}
+
+	f.client.logger.Debug("Point created: '%s' on flow '%s'", description, f.Flow.Name)
 	return nil
 }
 
-func (f *FlowInstance) AddAssertion(actual interface{}) error {
-	if f.client.Config.IsProduction || (len(f.Flow.Status) >= 7 && f.Flow.Status[:7] == "SKIPPED") {
+func (f *flowInstance) AddAssertion(ctx context.Context, actual interface{}) error {
+	if f.client.Config.IsProduction || isSkipped(f.Flow.Status) {
 		return nil
 	}
 
 	actualJSON, err := json.Marshal(actual)
 	if err != nil {
-		return fmt.Errorf("failed to marshal actual value: %v", err)
+		return fmt.Errorf("failed to marshal actual value: %w", err)
 	}
 
-	_, err = f.client.DB.Exec("INSERT INTO assertions (flow_id, actual, service_name) VALUES ($1, $2, $3)",
-		f.Flow.ID, actualJSON, f.client.Config.ServiceName)
-
-	if err != nil {
-		return fmt.Errorf("failed to add assertion: %v", err)
+	if err := f.client.storage.InsertAssertion(ctx, f.Flow.ID, actualJSON, f.client.Config.ServiceName); err != nil {
+		return &FlowError{Op: "AddAssertion", FlowName: f.Flow.Name, Err: err}
 	}
+
+	f.client.logger.Debug("Assertion added to flow '%s'", f.Flow.Name)
 	return nil
 }
 
-func (f *FlowInstance) Finish() (*FinishResult, error) {
-	if f.client.Config.IsProduction {
+func (f *flowInstance) Finish(ctx context.Context) (*FinishResult, error) {
+	if f.client.Config.IsProduction || isSkipped(f.Flow.Status) {
 		return &FinishResult{Success: true}, nil
 	}
 
-	_, err := f.client.DB.Exec("UPDATE flows SET status = 'FINISHED' WHERE id = $1", f.Flow.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to close flow: %v", err)
+	if err := f.client.storage.FinishFlow(ctx, f.Flow.ID); err != nil {
+		return nil, &FlowError{Op: "Finish", FlowName: f.Flow.Name, Err: err}
 	}
 
-	return f.executeWorker()
+	f.client.cache.Delete(f.Flow.Name, f.Flow.Identifier)
+	return f.executeWorker(ctx)
 }
 
-type mixedEvent struct {
-	Type      string
-	Timestamp time.Time
-	Point     *Point
-	Assertion *Assertion
-}
-
-func (f *FlowInstance) executeWorker() (*FinishResult, error) {
-	pRows, err := f.client.DB.Query("SELECT id, description, expected, created_at FROM points WHERE flow_id = $1 ORDER BY created_at ASC", f.Flow.ID)
+func (f *flowInstance) executeWorker(ctx context.Context) (*FinishResult, error) {
+	points, assertions, err := f.client.storage.FetchPointsAndAssertions(ctx, f.Flow.ID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch points: %v", err)
-	}
-	defer pRows.Close()
-
-	var points []Point
-	for pRows.Next() {
-		var p Point
-		var expectedBytes []byte
-		if err := pRows.Scan(&p.ID, &p.Description, &expectedBytes, &p.CreatedAt); err != nil {
-			return nil, err
-		}
-		if expectedBytes != nil {
-			p.Expected = json.RawMessage(expectedBytes)
-		}
-		points = append(points, p)
-	}
-
-	aRows, err := f.client.DB.Query("SELECT id, actual, created_at FROM assertions WHERE flow_id = $1 ORDER BY created_at ASC", f.Flow.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch assertions: %v", err)
-	}
-	defer aRows.Close()
-
-	var assertions []Assertion
-	for aRows.Next() {
-		var a Assertion
-		var actualBytes []byte
-		if err := aRows.Scan(&a.ID, &actualBytes, &a.CreatedAt); err != nil {
-			return nil, err
-		}
-		if actualBytes != nil {
-			a.Actual = json.RawMessage(actualBytes)
-		}
-		assertions = append(assertions, a)
+		return nil, &FlowError{Op: "Finish", FlowName: f.Flow.Name, Err: err}
 	}
 
 	var discrepancies []Discrepancy
+	errorCount := 0
 
 	maxLen := len(points)
 	if len(assertions) > maxLen {
@@ -251,19 +204,23 @@ func (f *FlowInstance) executeWorker() (*FinishResult, error) {
 
 	for i := 0; i < maxLen; i++ {
 		if i >= len(assertions) {
+			errorCount++
 			discrepancies = append(discrepancies, Discrepancy{
 				PointID:     points[i].ID,
 				Description: points[i].Description,
 				Diff:        "Missing assertion for this point",
+				Timestamp:   time.Now(),
 			})
 			continue
 		}
 
 		if i >= len(points) {
+			errorCount++
 			discrepancies = append(discrepancies, Discrepancy{
 				AssertionID: assertions[i].ID,
 				Description: "Orphan Assertion",
 				Diff:        fmt.Sprintf("Assertion #%d found without a matching Point #%d", i+1, i+1),
+				Timestamp:   time.Now(),
 			})
 			continue
 		}
@@ -271,25 +228,40 @@ func (f *FlowInstance) executeWorker() (*FinishResult, error) {
 		p := points[i]
 		a := assertions[i]
 
-		diff, equal := DeepCompare(p.Expected, a.Actual)
+		diffs, equal := DeepCompare(p.Expected, a.Actual)
 		if !equal {
+			errorCount++
 			var expectedVal, actualVal interface{}
 			_ = json.Unmarshal(p.Expected, &expectedVal)
 			_ = json.Unmarshal(a.Actual, &actualVal)
 
+			diffStr := FormatDiffs(diffs)
 			discrepancies = append(discrepancies, Discrepancy{
 				PointID:     p.ID,
 				AssertionID: a.ID,
 				Description: p.Description,
 				Expected:    expectedVal,
 				Actual:      actualVal,
-				Diff:        diff,
+				Diff:        diffStr,
+				Timestamp:   time.Now(),
 			})
 		}
 	}
 
-	return &FinishResult{
+	executionTime := time.Since(f.startTime)
+
+	result := &FinishResult{
 		Success:       len(discrepancies) == 0,
 		Discrepancies: discrepancies,
-	}, nil
+		ExecutionTime: executionTime,
+		ErrorCount:    errorCount,
+	}
+
+	if result.Success {
+		f.client.logger.Info("Flow '%s' finished: SUCCESS (%s)", f.Flow.Name, executionTime)
+	} else {
+		f.client.logger.Error("Flow '%s' finished: FAILED with %d discrepancies (%s)", f.Flow.Name, errorCount, executionTime)
+	}
+
+	return result, nil
 }

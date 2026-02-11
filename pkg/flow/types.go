@@ -1,17 +1,19 @@
 package flow
 
 import (
-	"database/sql"
 	"encoding/json"
 	"time"
 )
 
 type Flow struct {
-	ID         int64     `json:"id"`
-	Name       string    `json:"name"`
-	Identifier string    `json:"identifier,omitempty"`
-	Status     string    `json:"status"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID         int64           `json:"id"`
+	Name       string          `json:"name"`
+	Identifier string          `json:"identifier,omitempty"`
+	Status     string          `json:"status"`
+	CreatedAt  time.Time       `json:"created_at"`
+	UpdatedAt  time.Time       `json:"updated_at"`
+	Service    string          `json:"service"`
+	Metadata   json.RawMessage `json:"metadata,omitempty"`
 }
 
 type Point struct {
@@ -21,6 +23,8 @@ type Point struct {
 	Expected    json.RawMessage `json:"expected"`
 	ServiceName string          `json:"service_name"`
 	CreatedAt   time.Time       `json:"created_at"`
+	Schema      json.RawMessage `json:"schema,omitempty"`
+	Timeout     *time.Duration  `json:"timeout,omitempty"`
 }
 
 type Assertion struct {
@@ -29,27 +33,14 @@ type Assertion struct {
 	Actual      json.RawMessage `json:"actual"`
 	ServiceName string          `json:"service_name"`
 	CreatedAt   time.Time       `json:"created_at"`
-}
-
-type FlowConfig struct {
-	ServiceName   string
-	IsProduction  bool
-	MaxExecutions int
-}
-
-type FlowClient struct {
-	DB     *sql.DB
-	Config FlowConfig
-}
-
-type FlowInstance struct {
-	client *FlowClient
-	Flow   *Flow
+	ProcessedAt *time.Time      `json:"processed_at,omitempty"`
 }
 
 type FinishResult struct {
 	Success       bool          `json:"success"`
 	Discrepancies []Discrepancy `json:"discrepancies,omitempty"`
+	ExecutionTime time.Duration `json:"execution_time"`
+	ErrorCount    int           `json:"error_count"`
 }
 
 type Discrepancy struct {
@@ -59,4 +50,23 @@ type Discrepancy struct {
 	Expected    interface{} `json:"expected"`
 	Actual      interface{} `json:"actual"`
 	Diff        string      `json:"diff"`
+	Timestamp   time.Time   `json:"timestamp"`
+}
+
+type SchemaValidator struct {
+	Schema json.RawMessage `json:"schema"`
+}
+
+type PointOption func(*Point)
+
+func WithSchema(schema json.RawMessage) PointOption {
+	return func(p *Point) {
+		p.Schema = schema
+	}
+}
+
+func WithTimeout(d time.Duration) PointOption {
+	return func(p *Point) {
+		p.Timeout = &d
+	}
 }

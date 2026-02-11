@@ -1,6 +1,7 @@
 package infra
 
 import (
+	"context"
 	"database/sql"
 	"flow-tool/examples/clean_architecture/domain"
 	"flow-tool/pkg/flow"
@@ -24,15 +25,17 @@ func NewFlowOrderObserver(db *sql.DB, serviceName string) (*FlowOrderObserver, e
 }
 
 func (o *FlowOrderObserver) OnOrderCreated(order domain.Order) {
+	ctx := context.Background()
+
 	fmt.Printf("[Infra] Flow Adapter intercepting Order %s\n", order.ID)
 
-	f, err := o.client.Start("Order Flow", order.ID)
+	f, err := o.client.Start(ctx, "Order Flow", order.ID)
 	if err != nil {
 		fmt.Printf("Error starting flow: %v\n", err)
 		return
 	}
 
-	err = f.CreatePoint("Order Created", map[string]interface{}{
+	err = f.CreatePoint(ctx, "Order Created", map[string]interface{}{
 		"id":     order.ID,
 		"amount": order.Amount,
 		"status": order.Status,

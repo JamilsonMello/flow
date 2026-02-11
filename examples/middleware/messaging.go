@@ -20,9 +20,9 @@ func FlowMiddleware(flowClient *flow.FlowClient, next Handler) Handler {
 
 		fmt.Printf("[Middleware] Creating assertion for Flow: %s\n", flowID)
 
-		f, err := flowClient.GetFlow(flowID)
+		f, err := flowClient.GetFlow(ctx, flowID)
 		if err == nil {
-			f.AddAssertion(msg.Payload)
+			f.AddAssertion(ctx, msg.Payload)
 		} else {
 			fmt.Printf("[Middleware] Warning: Flow %s not found\n", flowID)
 		}
@@ -32,9 +32,6 @@ func FlowMiddleware(flowClient *flow.FlowClient, next Handler) Handler {
 }
 
 func main() {
-	// db, _ := sql.Open(...)
-	// flowClient, _ := flow.NewClient(db, flow.FlowConfig{ServiceName: "ConsumerService"})
-
 	var flowClient *flow.FlowClient = nil
 
 	myBusinessHandler := func(ctx context.Context, msg Message) error {

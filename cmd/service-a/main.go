@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
@@ -14,7 +15,6 @@ import (
 )
 
 func main() {
-	// Connect to DB
 	connStr := "user=user password=password dbname=flow_db sslmode=disable host=127.0.0.1 port=5432"
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
@@ -22,10 +22,8 @@ func main() {
 	}
 	defer db.Close()
 
-	// Wait for DB to be ready given docker-compose startup
 	time.Sleep(2 * time.Second)
 
-	// IsProduction = false for demo
 	client, err := flow.NewClient(db, flow.FlowConfig{
 		ServiceName:   "Service A (Order System)",
 		IsProduction:  false,
@@ -35,23 +33,24 @@ func main() {
 		log.Fatalf("Failed to create client: %v", err)
 	}
 
-	// Generate a random Order ID or use provided one
 	rand.Seed(time.Now().UnixNano())
 	orderID := fmt.Sprintf("ORDER-%d", rand.Intn(99999))
 	if len(os.Args) > 1 {
 		orderID = os.Args[1]
 	}
 
+	ctx := context.Background()
+
 	fmt.Printf("Starting flow '%s'...\n", orderID)
 
-	f, err := client.Start("Order Processing", orderID)
+	f, err := client.Start(ctx, "Order Processing", orderID)
 	if err != nil {
 		log.Fatalf("Failed to start flow: %v", err)
 	}
 
 	// 1. Order Received
 	fmt.Println("-> [1] Order Received")
-	err = f.CreatePoint("Step 1: Order Received", map[string]interface{}{
+	err = f.CreatePoint(ctx, "Step 1: Order Received", map[string]interface{}{
 		"status":      "PENDING",
 		"total":       150.50,
 		"customer_id": "CUST-99",
@@ -61,7 +60,7 @@ func main() {
 
 	// 2. Risk Check
 	fmt.Println("-> [2] Risk Check Passed")
-	err = f.CreatePoint("Step 2: Risk Analysis", map[string]interface{}{
+	err = f.CreatePoint(ctx, "Step 2: Risk Analysis", map[string]interface{}{
 		"risk_score": 0.05,
 		"approved":   true,
 		"source":     "internal-ai",
@@ -71,7 +70,7 @@ func main() {
 
 	// 3. Payment Authorization
 	fmt.Println("-> [3] Payment Authorized")
-	err = f.CreatePoint("Step 3: Payment", map[string]interface{}{
+	err = f.CreatePoint(ctx, "Step 3: Payment", map[string]interface{}{
 		"provider": "Stripe",
 		"status":   "CAPTURED",
 		"amount":   150.50,
@@ -81,7 +80,7 @@ func main() {
 
 	// 4. Handover to Logistics
 	fmt.Println("-> [4] Sent to Logistics")
-	err = f.CreatePoint("Step 4: Logistics Handover", map[string]interface{}{
+	err = f.CreatePoint(ctx, "Step 4: Logistics Handover", map[string]interface{}{
 		"warehouse":          "SP-01",
 		"priority":           "HIGH",
 		"estimated_delivery": "2026-02-10",

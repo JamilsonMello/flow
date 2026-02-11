@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 
 	"flow-tool/pkg/flow"
@@ -15,16 +16,16 @@ type OrderService struct {
 }
 
 func (s *OrderService) CreateOrder(orderID string, amount float64) error {
-	f, _ := s.flowClient.Start("Create Order Flow", orderID)
-	f.CreatePoint("Order Created", map[string]interface{}{
+	ctx := context.Background()
+
+	f, _ := s.flowClient.Start(ctx, "Create Order Flow", orderID)
+	f.CreatePoint(ctx, "Order Created", map[string]interface{}{
 		"id":     orderID,
 		"amount": amount,
 		"status": "PENDING",
 	})
 
 	fmt.Printf("Executing Business Logic for Order %s...\n", orderID)
-	// db.Save(order)...
-	// queue.Publish(order)...
 
 	return nil
 }
